@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Votação Blog Evereste: Temas de Inovação e Sustentabilidade</title>
+    <!-- Carregamento do Tailwind CSS para estilização rápida e responsiva -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Configuração da fonte Inter -->
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f7f9fb; /* Fundo mais claro e suave */
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col antialiased">
+
+    <!-- Mensagem de Confirmação/Alerta -->
+    <div id="message-box" class="fixed top-4 right-4 z-50 transition-transform transform translate-x-full duration-500 ease-out">
+        <div id="message-content" class="bg-indigo-600 text-white font-semibold py-3 px-6 rounded-lg shadow-xl flex items-center space-x-2">
+            <!-- Ícone e Texto são preenchidos via JavaScript -->
+        </div>
+    </div>
+
+    <header class="bg-white shadow-md">
+        <div class="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
+            <h1 class="text-3xl font-extrabold text-gray-900">
+                🗳️ Votação Evereste Blog
+            </h1>
+            <p class="mt-1 text-lg text-gray-500">
+                Vote nos temas que você gostaria de ver em destaque em Inovação, Ação Social e Sustentabilidade.
+            </p>
+        </div>
+    </header>
+
+    <main class="flex-grow max-w-7xl mx-auto py-8 sm:px-6 lg:px-8 w-full">
+        <!-- Container Principal da Votação -->
+        <div id="voting-container" class="grid grid-cols-1 md:grid-cols-3 gap-8">
+            <!-- Conteúdo carregado e gerenciado via JavaScript -->
+            <p id="loading-text" class="col-span-3 text-center text-gray-500 text-lg">
+                Carregando dados da votação...
+            </p>
+        </div>
+    </main>
+
+    <footer class="bg-gray-800 text-white py-4 mt-8">
+        <div class="max-w-7xl mx-auto text-center">
+            <p>&copy; 2025 Blog Evereste. Todos os direitos reservados. | Votação em tempo real com Firebase.</p>
+        </div>
+    </footer>
+
+    <!-- Firebase Imports -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, onSnapshot, runTransaction, increment } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Variáveis globais obrigatórias no ambiente Canvas
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+        // Configuração de Log do Firestore
+        // setLogLevel('Debug'); // Descomente para debug
+
+        // Inicializa o Firebase
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        const auth = getAuth(app);
+
+        const VOTING_DOC_PATH = `/artifacts/${appId}/public/data/evereste_voting/voting_data`;
+        const docRef = doc(db, VOTING_DOC_PATH);
+
+        // Estrutura inicial dos dados (usada se o documento não existir)
+        const initialData = {
+            categories: {
+                tecnologia_inovacao: {
+                    name: "Tecnologia e Inovação",
+                    color: "bg-indigo-500",
+                    themes: {
+                        ia_impacto: { name: "Inteligência Artificial e Impacto Social", votes: 0, icon: "💡" },
+                        inclusao_digital: { name: "Inclusão Digital e Equidade Tecnológica", votes: 0, icon: "💻" },
+                        computacao_quantica: { name: "Computação Quântica", votes: 0, icon: "⚛️" }
+                    }
+                },
+                acao_social: {
+                    name: "Ação Social",
+                    color: "bg-emerald-500",
+                    themes: {
+                        engajamento_comunitario: { name: "Engajamento Comunitário e Inovação", votes: 0, icon: "🤝" },
+                        diversidade_inclusao: { name: "Diversidade Inclusão no Ecossistema de Inovação", votes: 0, icon: "🌈" },
+                        voluntariado_tecnologico: { name: "Voluntariado Tecnológico", votes: 0, icon: "⚙️" }
+                    }
+                },
+                sustentabilidade_cop30: {
+                    name: "Sustentabilidade e COP30",
+                    color: "bg-amber-500",
+                    themes: {
+                        cop30_amazonia: { name: "COP30 e o Futuro da Amazônia", votes: 0, icon: "🌳" },
+                        bioeconomia: { name: "Bioeconomia e Inovação Verde", votes: 0, icon: "🌱" },
+                        transicao_energetica: { name: "Transição Energética e Inovação", votes: 0, icon: "⚡" }
+                    }
+                }
+            }
+        };
+
+        let totalVotes = 0;
+
+        /**
+         * Exibe uma mensagem de alerta ou confirmação personalizada.
+         * @param {string} message A mensagem a ser exibida.
+         * @param {string} type O tipo de mensagem ('success' ou 'error').
+         */
+        function showMessage(message, type) {
+            const box = document.getElementById('message-box');
+            const content = document.getElementById('message-content');
+            
+            // Define estilos com base no tipo
+            let bgColor = type === 'success' ? 'bg-green-600' : 'bg-red-600';
+            let icon = type === 'success' ? '✅' : '❌';
+
+            content.className = `py-3 px-6 rounded-lg shadow-xl flex items-center space-x-2 ${bgColor}`;
+            content.innerHTML = `${icon} <span class="text-sm">${message}</span>`;
+            
+            // Mostra a caixa
+            box.classList.remove('translate-x-full');
+            
+            // Esconde a caixa após 3 segundos
+            setTimeout(() => {
+                box.classList.add('translate-x-full');
+            }, 3000);
+        }
+
+        /**
+         * Renderiza a interface de votação e resultados.
+         * @param {object} categories Dados da votação com votos atualizados.
+         */
+        function renderVotingUI(categories) {
+            const container = document.getElementById('voting-container');
+            container.innerHTML = '';
+            
+            totalVotes = Object.values(categories).flatMap(cat => 
+                Object.values(cat.themes).map(theme => theme.votes)
+            ).reduce((sum, votes) => sum + votes, 0);
+
+            // Se não houver votos, define um total de 1 para evitar divisão por zero,
+            // mas o cálculo de percentual não será exibido de qualquer forma.
+            const displayTotalVotes = totalVotes === 0 ? 1 : totalVotes;
+
+            // Renderiza cada categoria
+            Object.entries(categories).forEach(([catKey, category]) => {
+                const categoryCard = document.createElement('div');
+                categoryCard.className = `bg-white p-6 rounded-xl shadow-lg border-t-8 ${category.color} flex flex-col h-full`;
+                categoryCard.innerHTML = `
+                    <h2 class="text-2xl font-bold mb-4 text-gray-800">${category.name}</h2>
+                    <div id="themes-${catKey}" class="space-y-4 flex-grow">
+                        <!-- Temas serão inseridos aqui -->
+                    </div>
+                `;
+                
+                const themesContainer = categoryCard.querySelector(`#themes-${catKey}`);
+                
+                // Renderiza cada tema
+                Object.entries(category.themes).forEach(([themeKey, theme]) => {
+                    const percentage = totalVotes > 0 ? ((theme.votes / displayTotalVotes) * 100).toFixed(1) : '0.0';
+                    
+                    const themeElement = document.createElement('div');
+                    themeElement.className = 'bg-gray-50 p-4 rounded-lg shadow-sm border border-gray-200 hover:shadow-md transition duration-300';
+                    themeElement.innerHTML = `
+                        <div class="flex items-start justify-between">
+                            <h3 class="font-semibold text-lg text-gray-700 leading-tight">
+                                ${theme.icon} ${theme.name}
+                            </h3>
+                            <div class="text-2xl font-extrabold text-indigo-600">${theme.votes}</div>
+                        </div>
+                        
+                        <!-- Barra de Progresso/Resultados -->
+                        <div class="mt-2 w-full bg-gray-200 rounded-full h-2.5">
+                            <div 
+                                class="h-2.5 rounded-full ${category.color.replace('500', '600')}"
+                                style="width: ${percentage}%; transition: width 0.5s ease-in-out;">
+                            </div>
+                        </div>
+                        
+                        <div class="flex justify-between items-center mt-3">
+                            <span class="text-xs font-medium text-gray-500">${percentage}% dos votos</span>
+                            <button 
+                                id="vote-btn-${catKey}-${themeKey}" 
+                                class="px-4 py-1 text-sm font-semibold text-white transition duration-300 rounded-full shadow-md hover:shadow-lg focus:outline-none focus:ring-4 ${category.color} hover:${category.color.replace('500', '600')}"
+                                data-cat-key="${catKey}" 
+                                data-theme-key="${themeKey}">
+                                Votar
+                            </button>
+                        </div>
+                    `;
+                    themesContainer.appendChild(themeElement);
+
+                    // Adiciona o listener de clique ao botão de voto
+                    themeElement.querySelector(`#vote-btn-${catKey}-${themeKey}`).addEventListener('click', handleVote);
+                });
+                
+                container.appendChild(categoryCard);
+            });
+        }
+
+        /**
+         * Função principal de votação.
+         * Lida com o clique e executa a transação no Firestore.
+         * @param {Event} event O evento de clique.
+         */
+        async function handleVote(event) {
+            const button = event.currentTarget;
+            const catKey = button.getAttribute('data-cat-key');
+            const themeKey = button.getAttribute('data-theme-key');
+            
+            // Desabilita o botão para evitar cliques duplos
+            button.disabled = true;
+            button.textContent = 'Votando...';
+            button.classList.add('opacity-50');
+
+            try {
+                // Aumenta a contagem de votos para o tema específico
+                const themePath = `categories.${catKey}.themes.${themeKey}.votes`;
+
+                await runTransaction(db, async (transaction) => {
+                    const sfDoc = await transaction.get(docRef);
+                    
+                    if (!sfDoc.exists()) {
+                        // Se o documento não existir, usa a estrutura inicial
+                        const newData = JSON.parse(JSON.stringify(initialData));
+                        newData.categories[catKey].themes[themeKey].votes = 1; // 1º voto
+                        transaction.set(docRef, newData);
+                    } else {
+                        // Incrementa o campo específico de forma segura
+                        transaction.update(docRef, {
+                            [themePath]: increment(1)
+                        });
+                    }
+                });
+
+                const themeName = initialData.categories[catKey].themes[themeKey].name;
+                showMessage(`Seu voto em "${themeName}" foi registrado com sucesso!`, 'success');
+
+            } catch (e) {
+                console.error("Falha na transação (voto): ", e);
+                showMessage('Houve um erro ao registrar seu voto. Tente novamente.', 'error');
+            } finally {
+                // Reabilita o botão após a transação
+                button.disabled = false;
+                button.textContent = 'Votar';
+                button.classList.remove('opacity-50');
+            }
+        }
+
+
+        /**
+         * Inicialização do Firebase e Listeners
+         */
+        async function initialize() {
+            try {
+                // 1. Autenticação:
+                // É necessário que o usuário esteja autenticado (request.auth != null) para votar.
+                // Se houver um token customizado (ambiente Canvas), ele é usado. Caso contrário,
+                // o usuário é autenticado anonimamente (o que satisfaz a regra de escrita do Firestore).
+                if (initialAuthToken) {
+                    await signInWithCustomToken(auth, initialAuthToken);
+                } else {
+                    // Autenticação anônima para permitir a votação
+                    await signInAnonymously(auth);
+                }
+                
+                // 2. Listener em tempo real (onSnapshot)
+                onSnapshot(docRef, (doc) => {
+                    document.getElementById('loading-text')?.remove(); // Remove o texto de loading
+                    
+                    if (doc.exists()) {
+                        // Documento existe, renderiza com os dados atualizados
+                        const data = doc.data();
+                        renderVotingUI(data.categories);
+                    } else {
+                        // Documento não existe, renderiza com a estrutura inicial (0 votos)
+                        renderVotingUI(initialData.categories);
+                        console.log("Documento de votação não encontrado. Usando dados iniciais.");
+                        
+                        // O primeiro voto criará o documento (tratado em handleVote)
+                    }
+                }, (error) => {
+                    console.error("Erro no listener do Firestore:", error);
+                    document.getElementById('voting-container').innerHTML = `
+                        <p class="col-span-3 text-center text-red-600 text-xl">
+                            ❌ Erro ao carregar os dados: ${error.message}
+                        </p>
+                    `;
+                });
+
+            } catch (error) {
+                console.error("Erro na inicialização ou autenticação do Firebase:", error);
+                
+                // --- NOVO TRATAMENTO DE ERRO VISÍVEL ---
+                const container = document.getElementById('voting-container');
+                container.innerHTML = `
+                    <div class="col-span-3 text-center p-8 bg-red-100 border border-red-400 text-red-700 rounded-xl shadow-md mx-auto max-w-lg">
+                        <p class="text-xl font-bold mb-2">❌ ERRO CRÍTICO DE INICIALIZAÇÃO</p>
+                        <p class="mt-2">Não foi possível conectar ou autenticar no Firebase.</p>
+                        <p class="text-sm mt-1 font-mono break-all">Detalhes (Console): ${error.message}</p>
+                        <p class="mt-4 text-sm">Certifique-se de que a configuração do ambiente está correta.</p>
+                    </div>
+                `;
+                // --- FIM DO NOVO TRATAMENTO ---
+
+                showMessage('Falha na conexão com o sistema de votação.', 'error');
+            }
+        }
+
+        // Garante que a inicialização comece após o carregamento da página
+        window.onload = initialize;
+
+    </script>
+</body>
+</html>
